@@ -1,0 +1,31 @@
+{
+  "_note": "Ground truth for the bug zoo. The agent never sees this file; it is only used to score runs.",
+  "apps": {
+    "shop": {
+      "url": "http://localhost:5173/shop/",
+      "bugs": [
+        {
+          "id": "shop-total-ignores-qty",
+          "severity": "major",
+          "description": "Adding the same product twice shows quantity 2, but the cart total counts it only once.",
+          "scenario": "Add 'Green tea' to the cart twice. Expected: the cart shows Green tea × 2 and the total is 5 000 ₸."
+        },
+        {
+          "id": "shop-promo-increases-total",
+          "severity": "major",
+          "description": "Promo code SAVE10 says −10% but the total goes up by 10%.",
+          "scenario": "Add 'Ceramic mug' to the cart, enter promo code SAVE10 and apply it. Expected: the total drops from 4 000 ₸ to 3 600 ₸."
+        },
+        {
+          "id": "shop-checkout-no-email-validation",
+          "severity": "minor",
+          "description": "Checkout confirms the order with an empty or invalid email.",
+          "scenario": "Add any product, go to checkout, enter the name 'Aibek', leave the email empty and place the order. Expected: the shop asks for a valid email and does not confirm the order."
+        }
+      ],
+      "clean_scenarios": [
+        "Add 'Mountain honey' to the cart once. Expected: the cart shows Mountain honey × 1 and the total is 6 500 ₸."
+      ]
+    }
+  }
+}

@@ -1,0 +1,72 @@
+# Probei
+
+A QA agent on Meta models that tests a web app the way a user does: it reads a plain-language scenario, looks at screenshots, clicks and types, checks the result and writes a bug report with steps and screenshots. No selectors, so tests survive a redesign.
+
+Built for the **Meta Global AI Developer Hackathon** (Oct 26 – Nov 4, 2026), track **Indie**, theme **Build for Your World**. All code in this repository was written during the hackathon.
+
+## How it works
+
+1. **Scenario** — plain text: what to do and what is expected.
+2. **Screenshot** — Playwright captures the page (1280×800).
+3. **Decide** — Muse Spark looks at the screenshot and the history and returns one action as JSON.
+4. **Act** — click, type, press a key, scroll or wait.
+5. **Check** — repeat until the scenario passes, a bug is found, or the agent gets stuck.
+6. **Report** — `report.md` and `report.json` with steps, screenshots, page errors and a video of the run.
+
+## Models
+
+| Provider | Model | Set in `.env` |
+| --- | --- | --- |
+| Baseten (open weights) | `meta-models/muse-spark-open-1026` | `LLM_PROVIDER=baseten` |
+| Meta Model API | Muse Spark (id from Meta docs) | `LLM_PROVIDER=meta` |
+
+Both are OpenAI-compatible, so switching is one line in `.env`.
+
+## Quick start
+
+```bash
+npm install
+npm run browsers          # downloads Chromium for Playwright
+cp .env.example .env      # add your key(s); .env is git-ignored
+npm run zoo               # bug zoo shop at http://localhost:5173/shop/
+```
+
+In a second terminal:
+
+```bash
+npm run probe -- --url http://localhost:5173/shop/ \
+  --scenario "Add 'Green tea' to the cart twice. Expected: the cart shows Green tea × 2 and the total is 5 000 ₸."
+```
+
+Add `--headed` to watch the browser. Results land in `runs/<run-id>/`.
+
+## Web UI
+
+```bash
+npm run ui   # http://localhost:5174/
+```
+
+Enter the URL and scenario, watch each step with its screenshot live, then read the report. Past runs in `runs/` stay browsable from the same page. The server always runs headless; use `--headed` on the CLI to watch the browser.
+
+## Bug zoo
+
+`zoo/` holds small demo apps with planted bugs. `zoo/bugs.json` is the ground truth (the agent never sees it) and lists a scenario for each bug plus clean scenarios that must pass. It is used to measure:
+
+- bugs found out of the planted ones;
+- false alarms on clean scenarios;
+- whether tests still pass after a redesign;
+- time and cost per run.
+
+## Roadmap for the hackathon
+
+- [x] Agent loop v0, provider switch, reports with screenshots and video
+- [x] Bug zoo app #1 (shop) with three planted bugs
+- [ ] SAM 3.1 element finder (fallback: coordinates from Muse Spark)
+- [ ] Bug zoo benchmark runner and metrics table
+- [ ] Redesign test: same scenario on a restyled shop
+- [ ] Voice scenarios (Muse Voice Transcribe)
+- [ ] Web UI: start a run, watch it live, read the report
+
+## Security
+
+Keep API keys only in `.env`. Never commit it — the repository is public.

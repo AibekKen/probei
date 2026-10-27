@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Probei — visual QA runs</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <h1>Probei</h1>
+    <span class="muted">visual QA runs</span>
+  </header>
+  <main>
+    <section class="card">
+      <h2>New run</h2>
+      <form id="run-form">
+        <label for="url">URL</label>
+        <input id="url" type="url" required placeholder="http://localhost:5173/shop/" value="http://localhost:5173/shop/">
+        <label for="scenario">Scenario</label>
+        <textarea id="scenario" rows="3" required placeholder="What to do and what is expected…"></textarea>
+        <div class="row">
+          <div class="grow">
+            <label for="max-steps">Max steps</label>
+            <input id="max-steps" type="number" min="1" max="200" value="25">
+          </div>
+          <button type="submit" id="start">Start run</button>
+        </div>
+        <p class="msg error" id="form-error" hidden></p>
+      </form>
+    </section>
+
+    <section class="card" id="run-section" hidden>
+      <div class="run-head">
+        <h2>Run <code id="run-id"></code></h2>
+        <span id="run-status" class="badge running">running</span>
+      </div>
+      <div id="run-summary" class="summary" hidden></div>
+      <div id="steps"></div>
+      <p id="run-video-p" hidden><a id="run-video" href="#">Download run video</a></p>
+    </section>
+
+    <section class="card">
+      <div class="run-head">
+        <h2>Past runs</h2>
+        <button type="button" class="secondary" id="refresh">Refresh</button>
+      </div>
+      <div id="history"><p class="msg">Loading…</p></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

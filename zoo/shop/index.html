@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Steppe Goods — demo shop</title>
+  <style>
+    :root { --ink:#1d2433; --muted:#667085; --line:#e4e7ec; --brand:#2f5bd3; --bg:#f7f8fa; }
+    * { box-sizing: border-box; }
+    body { margin:0; font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--ink); background:var(--bg); }
+    header { background:#fff; border-bottom:1px solid var(--line); padding:16px 32px; display:flex; justify-content:space-between; align-items:center; }
+    header h1 { font-size:20px; margin:0; }
+    main { display:grid; grid-template-columns: 1fr 340px; gap:24px; padding:24px 32px; }
+    .products { display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; }
+    .card, .cart, .checkout, .done { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; }
+    .thumb { height:90px; border-radius:8px; margin-bottom:12px; }
+    .price { color:var(--muted); margin:4px 0 12px; }
+    button { font:inherit; border:0; border-radius:8px; padding:9px 14px; cursor:pointer; background:var(--brand); color:#fff; }
+    button.secondary { background:#eef2fb; color:var(--brand); }
+    .cart h2, .checkout h2, .done h2 { font-size:17px; margin:0 0 12px; }
+    .line { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dashed var(--line); }
+    .total { display:flex; justify-content:space-between; font-weight:600; margin:12px 0; }
+    .row { display:flex; gap:8px; margin:8px 0; }
+    input { font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; width:100%; }
+    label { display:block; font-size:13px; color:var(--muted); margin-top:8px; }
+    .msg { font-size:13px; margin-top:6px; color:var(--muted); }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Steppe Goods</h1>
+    <span id="cart-count">Cart: 0</span>
+  </header>
+  <main>
+    <section>
+      <div class="products" id="products"></div>
+    </section>
+    <aside>
+      <div class="cart" id="cart">
+        <h2>Your cart</h2>
+        <div id="lines"><p class="msg">The cart is empty.</p></div>
+        <div class="row">
+          <input id="promo" placeholder="Promo code" aria-label="Promo code">
+          <button class="secondary" id="apply">Apply</button>
+        </div>
+        <p class="msg" id="promo-msg"></p>
+        <div class="total"><span>Total</span><span id="total">0 ₸</span></div>
+        <button id="to-checkout">Checkout</button>
+      </div>
+
+      <div class="checkout hidden" id="checkout">
+        <h2>Checkout</h2>
+        <label for="name">Full name</label>
+        <input id="name" autocomplete="off">
+        <label for="email">Email</label>
+        <input id="email" autocomplete="off">
+        <div class="row" style="margin-top:14px">
+          <button id="place">Place order</button>
+          <button class="secondary" id="back">Back to cart</button>
+        </div>
+        <p class="msg" id="checkout-msg"></p>
+      </div>
+
+      <div class="done hidden" id="done">
+        <h2>Order confirmed</h2>
+        <p id="done-text"></p>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    // Demo shop for the Probei bug zoo. Planted bugs are listed in ../bugs.json.
+    const PRODUCTS = [
+      { id: 'tea', name: 'Green tea', price: 2500, color: '#cfe8d5' },
+      { id: 'mug', name: 'Ceramic mug', price: 4000, color: '#f3dccb' },
+      { id: 'honey', name: 'Mountain honey', price: 6500, color: '#f6e7b4' },
+    ];
+    const cart = new Map(); // id -> qty
+    let discount = 0;
+
+    const fmt = (n) => `${n.toLocaleString('ru-RU')} ₸`;
+    const $ = (id) => document.getElementById(id);
+
+    $('products').innerHTML = PRODUCTS.map((p) => `
+      <div class="card">
+        <div class="thumb" style="background:${p.color}"></div>
+        <strong>${p.name}</strong>
+        <div class="price">${fmt(p.price)}</div>
+        <button data-add="${p.id}">Add to cart</button>
+      </div>`).join('');
+
+    document.querySelectorAll('[data-add]').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.add;
+        cart.set(id, (cart.get(id) || 0) + 1);
+        render();
+      }));
+
+    function subtotal() {
+      let sum = 0;
+      for (const [id] of cart) {
+        // BUG shop-total-ignores-qty: quantity is ignored in the total.
+        sum += PRODUCTS.find((p) => p.id === id).price;
+      }
+      return sum;
+    }
+
+    function render() {
+      let count = 0;
+      const rows = [];
+      for (const [id, qty] of cart) {
+        const p = PRODUCTS.find((x) => x.id === id);
+        count += qty;
+        rows.push(`<div class="line"><span>${p.name} × ${qty}</span><span>${fmt(p.price * qty)}</span></div>`);
+      }
+      $('lines').innerHTML = rows.length ? rows.join('') : '<p class="msg">The cart is empty.</p>';
+      $('cart-count').textContent = `Cart: ${count}`;
+      const sub = subtotal();
+      // BUG shop-promo-increases-total: the 10% promo is added instead of subtracted.
+      const total = discount ? Math.round(sub * (1 + discount)) : sub;
+      $('total').textContent = fmt(total);
+    }
+
+    $('apply').addEventListener('click', () => {
+      if ($('promo').value.trim().toUpperCase() === 'SAVE10') {
+        discount = 0.1;
+        $('promo-msg').textContent = 'Promo SAVE10 applied: −10%';
+      } else {
+        $('promo-msg').textContent = 'Unknown promo code';
+      }
+      render();
+    });
+
+    $('to-checkout').addEventListener('click', () => {
+      if (cart.size === 0) { $('promo-msg').textContent = 'Add something to the cart first'; return; }
+      $('cart').classList.add('hidden');
+      $('checkout').classList.remove('hidden');
+    });
+
+    $('back').addEventListener('click', () => {
+      $('checkout').classList.add('hidden');
+      $('cart').classList.remove('hidden');
+    });
+
+    $('place').addEventListener('click', () => {
+      const name = $('name').value.trim();
+      if (!name) { $('checkout-msg').textContent = 'Please enter your name'; return; }
+      // BUG shop-checkout-no-email-validation: email is never checked.
+      $('checkout').classList.add('hidden');
+      $('done').classList.remove('hidden');
+      $('done-text').textContent = `Thank you, ${name}! A confirmation was sent to ${$('email').value || '(no email)'}.`;
+    });
+  </script>
+</body>
+</html>

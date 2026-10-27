@@ -1,0 +1,20 @@
+# Dependencies and build output
+node_modules/
+dist/
+
+# Agent run artifacts (screenshots, videos, reports)
+runs/
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Local context for AI coding agents (rules, plan, notes) — kept off the public repo
+.ai/*
+*.local.md
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
