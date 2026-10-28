@@ -71,3 +71,42 @@ export function getUiPort(): number {
   }
   return n;
 }
+
+export interface UiConfig {
+  port: number;
+  host: string;
+  /** Origins allowed to start runs from a browser. Requests without an Origin header (curl, CLI) pass. */
+  allowedOrigins: string[];
+  /** When set, every UI request needs HTTP Basic auth with this password (any user name). */
+  password: string;
+  /** Upper bound for maxSteps sent by the UI. */
+  maxSteps: number;
+  /** false: the agent may not open localhost, private networks or cloud metadata addresses. */
+  allowPrivateUrls: boolean;
+}
+
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+
+/** UI server settings. Defaults are safe for a laptop; a public server sets HOST=0.0.0.0. */
+export function getUiConfig(): UiConfig {
+  const port = getUiPort();
+  const host = process.env.HOST || '127.0.0.1';
+  const local = LOOPBACK_HOSTS.has(host);
+  const origins = (process.env.ALLOWED_ORIGIN || `http://localhost:${port},http://127.0.0.1:${port}`)
+    .split(',')
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+  const password = process.env.UI_PASSWORD ?? '';
+  if (!local && !password) {
+    throw new Error(`HOST=${host} exposes the UI beyond this machine; set UI_PASSWORD in .env.`);
+  }
+  const rawPrivate = process.env.ALLOW_PRIVATE_URLS;
+  return {
+    port,
+    host,
+    allowedOrigins: origins,
+    password,
+    maxSteps: intEnv('UI_MAX_STEPS', 30),
+    allowPrivateUrls: rawPrivate ? rawPrivate === 'true' : local,
+  };
+}

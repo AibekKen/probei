@@ -1,13 +1,15 @@
 // Web UI server for Probei: npm run ui  →  http://localhost:5174/
 // One page to start a run, stream its steps live over SSE and read past reports.
 import 'dotenv/config';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { mkdir, readdir, readFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runScenario, type RunResult, type Step } from './agent.js';
-import { getAgentConfig, getUiPort } from './config.js';
+import { getAgentConfig, getUiConfig } from './config.js';
 import { llmInfo } from './llm.js';
+import { isPublicHost } from './netguard.js';
 import { writeReport } from './report.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -27,6 +29,7 @@ const RUN_FILE_TYPES: Record<string, string> = {
   '.md': 'text/markdown; charset=utf-8',
 };
 const RUN_ID = /^[\w-]+$/;
+const ui = getUiConfig();
 
 interface ActiveRun {
   id: string;
@@ -49,6 +52,26 @@ interface RunSummary {
 }
 
 let active: ActiveRun | null = null;
+
+function digest(value: string): Buffer {
+  return createHash('sha256').update(value).digest();
+}
+
+/** HTTP Basic auth with any user name and UI_PASSWORD. Open when no password is set. */
+function authorized(req: IncomingMessage): boolean {
+  if (!ui.password) return true;
+  const header = req.headers.authorization ?? '';
+  if (!header.startsWith('Basic ')) return false;
+  const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8');
+  const password = decoded.slice(decoded.indexOf(':') + 1);
+  return timingSafeEqual(digest(password), digest(ui.password));
+}
+
+/** Blocks other web pages from starting runs through the visitor's browser. */
+function originAllowed(req: IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  return origin === undefined || ui.allowedOrigins.includes(origin);
+}
 
 function json(res: ServerResponse, code: number, data: unknown): void {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify(data));
@@ -117,6 +140,14 @@ async function sendFile(
 }
 
 async function handleStartRun(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!originAllowed(req)) {
+    json(res, 403, { error: 'Origin not allowed' });
+    return;
+  }
+  if (!(req.headers['content-type'] ?? '').startsWith('application/json')) {
+    json(res, 415, { error: 'Content-Type must be application/json' });
+    return;
+  }
   if (active && !active.finished) {
     json(res, 409, { error: `Run ${active.id} is still active; one run at a time.` });
     return;
@@ -131,11 +162,16 @@ async function handleStartRun(req: IncomingMessage, res: ServerResponse): Promis
   const b = (body ?? {}) as Record<string, unknown>;
   const url = typeof b.url === 'string' ? b.url.trim() : '';
   const scenario = typeof b.scenario === 'string' ? b.scenario.trim() : '';
+  let parsed: URL;
   try {
-    const parsed = new URL(url);
+    parsed = new URL(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error();
   } catch {
     json(res, 400, { error: 'url must be an http(s) URL' });
+    return;
+  }
+  if (!ui.allowPrivateUrls && !(await isPublicHost(parsed.hostname))) {
+    json(res, 400, { error: 'url must point to a public address on this server' });
     return;
   }
   if (!scenario || scenario.length > 8000) {
@@ -143,9 +179,9 @@ async function handleStartRun(req: IncomingMessage, res: ServerResponse): Promis
     return;
   }
   const agentConfig = getAgentConfig();
-  const maxSteps = b.maxSteps === undefined ? agentConfig.maxSteps : b.maxSteps;
-  if (typeof maxSteps !== 'number' || !Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > 200) {
-    json(res, 400, { error: 'maxSteps must be an integer from 1 to 200' });
+  const maxSteps = b.maxSteps === undefined ? Math.min(agentConfig.maxSteps, ui.maxSteps) : b.maxSteps;
+  if (typeof maxSteps !== 'number' || !Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > ui.maxSteps) {
+    json(res, 400, { error: `maxSteps must be an integer from 1 to ${ui.maxSteps}` });
     return;
   }
   try {
@@ -171,6 +207,7 @@ async function handleStartRun(req: IncomingMessage, res: ServerResponse): Promis
   json(res, 202, { id });
 
   void (async () => {
+    let done: Record<string, unknown> = { type: 'done', status: 'error', error: 'Run ended unexpectedly' };
     try {
       const result = await runScenario({
         url,
@@ -178,24 +215,27 @@ async function handleStartRun(req: IncomingMessage, res: ServerResponse): Promis
         runDir,
         maxSteps,
         headless: true, // headed stays CLI-only; the server never opens a visible browser
+        blockPrivate: !ui.allowPrivateUrls,
         onStep: (s) => {
           run.steps.push(s);
           broadcast(run, { type: 'step', step: s });
         },
       });
       await writeReport(runDir, result);
-      broadcast(run, {
+      done = {
         type: 'done',
         status: result.status,
         summary: result.summary ?? null,
         bug: result.bug ?? null,
         error: result.error ?? null,
         video: result.video ? basename(result.video) : null,
-      });
+      };
     } catch (err) {
-      broadcast(run, { type: 'done', status: 'error', error: (err as Error).message });
+      done = { type: 'done', status: 'error', error: (err as Error).message };
     } finally {
+      // Mark finished before the last event, so a client connecting now reads the saved report instead.
       run.finished = true;
+      broadcast(run, done);
       for (const client of run.clients) client.end();
       run.clients.clear();
       if (active === run) active = null;
@@ -292,6 +332,10 @@ async function onRequest(req: IncomingMessage, res: ServerResponse): Promise<voi
   try {
     const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
     const method = req.method ?? 'GET';
+    if (!authorized(req)) {
+      res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Probei"' }).end('Authentication required');
+      return;
+    }
     if (pathname.includes('bugs.json')) {
       res.writeHead(404).end('Not found');
       return;
@@ -340,7 +384,8 @@ async function onRequest(req: IncomingMessage, res: ServerResponse): Promise<voi
 }
 
 await mkdir(runsDir, { recursive: true });
-const port = getUiPort();
-createServer((req, res) => void onRequest(req, res)).listen(port, () => {
-  console.log(`Probei UI: http://localhost:${port}/`);
+createServer((req, res) => void onRequest(req, res)).listen(ui.port, ui.host, () => {
+  const where = ui.host === '0.0.0.0' || ui.host === '::' ? `all interfaces, port ${ui.port}` : `http://${ui.host}:${ui.port}/`;
+  console.log(`Probei UI: ${where}${ui.password ? ' (password required)' : ''}`);
+  if (!ui.allowPrivateUrls) console.log('Runs may only open public addresses (ALLOW_PRIVATE_URLS=false).');
 });

@@ -48,6 +48,17 @@ npm run ui   # http://localhost:5174/
 
 Enter the URL and scenario, watch each step with its screenshot live, then read the report. Past runs in `runs/` stay browsable from the same page. The server always runs headless; use `--headed` on the CLI to watch the browser.
 
+By default the UI listens on `127.0.0.1` only. To run it on a server:
+
+```bash
+HOST=0.0.0.0 UI_PASSWORD=<long-random-password> ALLOWED_ORIGIN=https://probei.example.com npm run ui
+```
+
+- `UI_PASSWORD` is required when `HOST` is not local; the browser asks for it (any user name).
+- `ALLOWED_ORIGIN` lists the pages allowed to start runs, so other sites cannot start runs through a visitor's browser.
+- `ALLOW_PRIVATE_URLS` defaults to `false` off localhost: the agent then refuses localhost, private networks and cloud metadata addresses (`169.254.169.254`), checked after DNS resolution and on every request, redirects included.
+- `UI_MAX_STEPS` caps the steps per run (default 30).
+
 ## Bug zoo
 
 `zoo/` holds small demo apps with planted bugs. `zoo/bugs.json` is the ground truth (the agent never sees it) and lists a scenario for each bug plus clean scenarios that must pass. It is used to measure:

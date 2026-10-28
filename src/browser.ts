@@ -1,4 +1,5 @@
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { isPublicHost } from './netguard.js';
 
 export const VIEWPORT = { width: 1280, height: 800 } as const;
 
@@ -25,7 +26,12 @@ export class BrowserSession {
     });
   }
 
-  static async start(url: string, videoDir: string, headless: boolean): Promise<BrowserSession> {
+  static async start(
+    url: string,
+    videoDir: string,
+    headless: boolean,
+    blockPrivate = false,
+  ): Promise<BrowserSession> {
     const browser = await chromium.launch({ headless });
     const context = await browser.newContext({
       viewport: VIEWPORT,
@@ -33,6 +39,15 @@ export class BrowserSession {
     });
     const page = await context.newPage();
     const session = new BrowserSession(browser, context, page);
+    if (blockPrivate) {
+      // Every request, redirects and subresources included, must go to a public address.
+      await context.route('**/*', async (route) => {
+        const target = new URL(route.request().url());
+        if (await isPublicHost(target.hostname)) return route.continue();
+        session.errors.push(`blocked request to private address: ${target.host}`);
+        return route.abort('blockedbyclient');
+      });
+    }
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await settle(page);
     return session;

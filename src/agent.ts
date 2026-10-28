@@ -170,6 +170,8 @@ export interface RunOptions {
   runDir: string;
   maxSteps: number;
   headless: boolean;
+  /** Refuse requests to localhost, private networks and cloud metadata addresses. */
+  blockPrivate?: boolean;
   onStep?: (step: Step) => void;
 }
 
@@ -193,7 +195,7 @@ export async function runScenario(opts: RunOptions): Promise<RunResult> {
 
   let session: BrowserSession | undefined;
   try {
-    session = await BrowserSession.start(opts.url, opts.runDir, opts.headless);
+    session = await BrowserSession.start(opts.url, opts.runDir, opts.headless, opts.blockPrivate);
     let pendingErrors = session.takeErrors();
     let prevPng: Buffer | undefined;
 
