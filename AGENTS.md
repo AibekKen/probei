@@ -8,6 +8,7 @@ Probei is a visual QA agent: scenario → screenshot → Meta model decides one 
 src/config.ts   provider settings from .env (baseten | meta), agent settings
 src/llm.ts      OpenAI-compatible client, JSON extraction (strips <think> blocks), one retry
 src/browser.ts  Playwright session: screenshots, actions, page/console/5xx error capture, video
+src/recorder.ts run video from screencast frames; model thinking time is cut out
 src/agent.ts    system prompt, action schema + validation, the run loop, stuck detection
 src/suggest.ts  app review crawl + scenario drafts from the Meta model
 src/projects.ts web UI projects (app URL + saved scenarios) in data/projects.json

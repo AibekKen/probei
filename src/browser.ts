@@ -1,6 +1,8 @@
+import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { isPublicHost } from './netguard.js';
 import { installOverlay, OVERLAY_HIDE_CSS } from './overlay.js';
+import { findFfmpeg, ScreenRecorder } from './recorder.js';
 
 export const VIEWPORT = { width: 1280, height: 800 } as const;
 
@@ -17,6 +19,7 @@ export class BrowserSession {
   private errors: string[] = [];
   private markShownAt = 0;
   private cursor = { x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 };
+  private recorder: ScreenRecorder | undefined;
 
   private constructor(
     private readonly browser: Browser,
@@ -39,14 +42,20 @@ export class BrowserSession {
     blockPrivate = false,
   ): Promise<BrowserSession> {
     const browser = await chromium.launch({ headless });
+    // Our own recorder cuts the model's thinking time out of the video; without
+    // Playwright's ffmpeg we fall back to its plain full-length recording.
+    const ffmpeg = findFfmpeg();
     const context = await browser.newContext({
       viewport: VIEWPORT,
-      recordVideo: { dir: videoDir, size: VIEWPORT },
+      ...(ffmpeg ? {} : { recordVideo: { dir: videoDir, size: VIEWPORT } }),
     });
     // tsx may wrap functions in __name(); the shim keeps the serialized script runnable in the page.
     await context.addInitScript({ content: `(() => { const __name = (f) => f; (${installOverlay})(); })();` });
     const page = await context.newPage();
     const session = new BrowserSession(browser, context, page);
+    if (ffmpeg) {
+      session.recorder = await ScreenRecorder.start(page, ffmpeg, join(videoDir, 'video.webm')).catch(() => undefined);
+    }
     if (blockPrivate) {
       // Every request, redirects and subresources included, must go to a public address.
       await context.route('**/*', async (route) => {
@@ -68,8 +77,11 @@ export class BrowserSession {
     return out;
   }
 
+  /** Screenshot for the model; the video pauses until the next action, so thinking time is cut. */
   async screenshot(path: string): Promise<Buffer> {
-    return this.page.screenshot({ path, style: OVERLAY_HIDE_CSS });
+    const png = await this.page.screenshot({ path, style: OVERLAY_HIDE_CSS });
+    this.recorder?.pause();
+    return png;
   }
 
   async click(x: number, y: number, label = 'click'): Promise<void> {
@@ -101,6 +113,7 @@ export class BrowserSession {
 
   /** Shows the action badge in the overlay (see overlay.ts); screenshots never include it. */
   private async showAction(label: string): Promise<void> {
+    this.recorder?.resume();
     this.markShownAt = Date.now();
     await this.page.evaluate((text) => window.__probeiOverlay?.badge(text), label);
   }
@@ -146,9 +159,10 @@ export class BrowserSession {
 
   /** Closes the browser and returns the path of the recorded video, if any. */
   async close(): Promise<string | undefined> {
+    const recorded = await this.recorder?.stop().catch(() => undefined);
     const video = this.page.video();
     await this.context.close();
     await this.browser.close();
-    return video ? video.path() : undefined;
+    return recorded ?? (video ? video.path() : undefined);
   }
 }

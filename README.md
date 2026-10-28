@@ -11,7 +11,7 @@ Built for the **Meta Global AI Developer Hackathon** (Oct 26 – Nov 4, 2026), t
 3. **Decide** — Muse Spark looks at the screenshot and the history and returns one action as JSON.
 4. **Act** — click, type, press a key, scroll or wait.
 5. **Check** — repeat until the scenario passes, a bug is found, or the agent gets stuck.
-6. **Report** — `report.md` and `report.json` with steps, screenshots, page errors and a video of the run.
+6. **Report** — `report.md` and `report.json` with steps, screenshots, page errors and a video of the run. The video skips the time the model spends thinking, so a few clicks make a few seconds of video.
 
 ## Models
 
