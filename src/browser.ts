@@ -54,7 +54,11 @@ export class BrowserSession {
     await settle(this.page);
   }
 
-  async type(text: string): Promise<void> {
+  async type(text: string, clear = false): Promise<void> {
+    if (clear) {
+      await this.page.keyboard.press('ControlOrMeta+a');
+      await this.page.keyboard.press('Backspace');
+    }
     await this.page.keyboard.type(text, { delay: 20 });
     await settle(this.page);
   }
