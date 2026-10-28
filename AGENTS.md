@@ -9,6 +9,9 @@ src/config.ts   provider settings from .env (baseten | meta), agent settings
 src/llm.ts      OpenAI-compatible client, JSON extraction (strips <think> blocks), one retry
 src/browser.ts  Playwright session: screenshots, actions, page/console/5xx error capture, video
 src/agent.ts    system prompt, action schema + validation, the run loop, stuck detection
+src/suggest.ts  app review crawl + scenario drafts from the Meta model
+src/projects.ts web UI projects (app URL + saved scenarios) in data/projects.json
+src/server.ts   web UI API: runs, projects, auto-review; web/ is the page
 src/report.ts   report.json + report.md per run in runs/<run-id>/
 src/cli.ts      npm run probe -- --url ... --scenario "..." [--max-steps N] [--headed]
 zoo/            demo apps with planted bugs; zoo/bugs.json is ground truth

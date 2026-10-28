@@ -40,13 +40,27 @@ npm run probe -- --url http://localhost:5173/shop/ \
 
 Add `--headed` to watch the browser. Results land in `runs/<run-id>/`.
 
+No scenarios yet? Let Probei review the app and draft them:
+
+```bash
+npm run probe -- --url http://localhost:5173/shop/ --suggest
+```
+
+It crawls same-origin pages and asks the model for up to 10 runnable scenarios. In the web UI this is the "Auto-review" button on a project.
+
 ## Web UI
 
 ```bash
 npm run ui   # http://localhost:5174/
 ```
 
-Enter the URL and scenario, watch each step with its screenshot live, then read the report. Past runs in `runs/` stay browsable from the same page. The server always runs headless; use `--headed` on the CLI to watch the browser.
+The UI is a three-pane workspace:
+
+- **Projects**: one per app URL. Create one, then press **Auto-review**: Probei walks the app's pages and saves drafted scenarios into the project. You can also write or edit scenarios yourself.
+- **Scenarios**: each saved scenario has a Run button and its own run history underneath. **Run all** queues every scenario of the project; the server runs one at a time, in order, and the waiting ones can be cancelled. Auto-review never starts runs by itself.
+- **Run**: live steps with screenshots, the bug report and the video of the selected run.
+
+Projects live in `data/projects.json` (git-ignored); each run links to its scenario through `runs/<id>/meta.json`. Older runs that match no saved scenario show under **Unsorted runs**, where you can save them into a project. The server always runs headless; use `--headed` on the CLI to watch the browser.
 
 By default the UI listens on `127.0.0.1` only. To run it on a server:
 

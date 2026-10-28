@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import { describeAction, runScenario } from './agent.js';
 import { getAgentConfig } from './config.js';
 import { writeReport } from './report.js';
+import { reviewApp, suggestScenarios } from './suggest.js';
 
 const { values } = parseArgs({
   options: {
@@ -11,8 +12,32 @@ const { values } = parseArgs({
     scenario: { type: 'string' },
     'max-steps': { type: 'string' },
     headed: { type: 'boolean', default: false },
+    suggest: { type: 'boolean', default: false },
+    'max-pages': { type: 'string' },
   },
 });
+
+if (values.suggest) {
+  if (!values.url) {
+    console.error('Usage: npm run probe -- --url <url> --suggest [--max-pages 6]');
+    process.exit(1);
+  }
+  const agentConfig = getAgentConfig();
+  const maxPages = values['max-pages'] ? Number.parseInt(values['max-pages'], 10) : 6;
+  console.log(`Reviewing ${values.url} …`);
+  const { review, homeScreenshot } = await reviewApp({
+    url: values.url,
+    maxPages,
+    headless: values.headed ? false : agentConfig.headless,
+  });
+  console.log(`Reviewed ${review.pages.length} page(s); drafting scenarios …\n`);
+  const { scenarios, usage } = await suggestScenarios(review, homeScreenshot);
+  for (const [i, s] of scenarios.entries()) {
+    console.log(`${i + 1}. ${s.title}\n   URL: ${s.url}\n   ${s.scenario.split('\n').join('\n   ')}\n`);
+  }
+  console.log(`Tokens: ${usage.promptTokens} in / ${usage.completionTokens} out`);
+  process.exit(0);
+}
 
 if (!values.url || !values.scenario) {
   console.error(

@@ -3,55 +3,138 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Probei — visual QA runs</title>
+  <title>Probei — visual QA</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header>
+  <header class="topbar">
     <h1>Probei</h1>
-    <span class="muted">visual QA runs</span>
+    <span class="muted">visual QA</span>
+    <span class="spacer"></span>
+    <label class="inline" for="max-steps">Max steps</label>
+    <input id="max-steps" type="number" min="1" max="30" value="25">
   </header>
-  <main>
-    <section class="card">
-      <h2>New run</h2>
-      <form id="run-form">
-        <label for="url">URL</label>
-        <input id="url" type="url" required placeholder="http://localhost:5173/shop/" value="http://localhost:5173/shop/">
-        <label for="scenario">Scenario</label>
-        <textarea id="scenario" rows="3" required placeholder="What to do and what is expected…"></textarea>
-        <div class="row">
-          <div class="grow">
-            <label for="max-steps">Max steps</label>
-            <input id="max-steps" type="number" min="1" max="30" value="25">
-          </div>
-          <button type="submit" id="start">Start run</button>
+
+  <div class="workspace">
+    <!-- Projects: one per app URL -->
+    <aside class="pane" id="projects-pane" aria-label="Projects">
+      <div class="pane-head">
+        <h2>Projects</h2>
+        <button type="button" id="new-project-btn" class="secondary small">+ New</button>
+      </div>
+      <form id="new-project" class="inset" hidden>
+        <label for="np-url">App URL</label>
+        <input id="np-url" type="url" required placeholder="http://localhost:5173/shop/">
+        <label for="np-name">Name (optional)</label>
+        <input id="np-name" type="text" maxlength="120" placeholder="e.g. Demo shop">
+        <div class="actions">
+          <button type="submit" class="small">Create</button>
+          <button type="button" id="np-cancel" class="secondary small">Cancel</button>
         </div>
-        <p class="msg error" id="form-error" hidden></p>
+        <p class="msg error" id="np-error" hidden></p>
       </form>
-    </section>
+      <nav id="project-list"></nav>
+      <button type="button" id="unassigned-btn" class="nav-item" hidden>
+        <span class="nav-name">Unsorted runs</span>
+        <span class="count" id="unassigned-count"></span>
+      </button>
+    </aside>
 
-    <section class="card" id="run-section" hidden>
-      <div class="run-head">
-        <h2>Run <code id="run-id"></code></h2>
-        <span id="run-status" class="badge running">running</span>
+    <!-- Selected project: its scenarios, each with its run history -->
+    <main class="pane" id="project-pane">
+      <div id="project-empty" class="empty">
+        <h2>Start with a project</h2>
+        <p>A project is the URL of the app you test. Probei can review it, walk its pages and draft scenarios for you.</p>
+        <button type="button" id="empty-new-project">+ New project</button>
       </div>
-      <div id="run-summary" class="summary" hidden></div>
-      <div id="steps"></div>
-      <div id="run-video-p" hidden>
-        <h3>Run video</h3>
-        <video id="run-video" controls preload="metadata"></video>
-        <p><a id="run-video-link" href="#">Download video</a></p>
-      </div>
-    </section>
 
-    <section class="card">
-      <div class="run-head">
-        <h2>Past runs</h2>
-        <button type="button" class="secondary" id="refresh">Refresh</button>
+      <div id="project-view" hidden>
+        <div class="project-head">
+          <div class="project-title">
+            <h2 id="project-name"></h2>
+            <a id="project-url" target="_blank" rel="noopener noreferrer"></a>
+          </div>
+          <div class="actions">
+            <button type="button" id="run-all-btn" title="Queue every scenario; they run one after another">Run all</button>
+            <button type="button" id="review-btn" class="secondary" title="Walk the app's pages and draft scenarios">Auto-review</button>
+            <button type="button" id="add-scenario-btn" class="secondary">+ Scenario</button>
+            <details class="menu">
+              <summary class="secondary" aria-label="Project actions">⋯</summary>
+              <div class="menu-body">
+                <button type="button" id="rename-project" class="secondary small">Rename</button>
+                <button type="button" id="edit-project-url" class="secondary small">Change URL</button>
+                <button type="button" id="delete-project" class="danger small">Delete project</button>
+              </div>
+            </details>
+          </div>
+        </div>
+        <p class="msg queue" id="queue-status" role="status" hidden></p>
+        <p class="msg" id="review-status" role="status"></p>
+        <p class="msg error" id="project-error" hidden></p>
+
+        <form id="scenario-form" class="inset" hidden>
+          <h3 id="scenario-form-title">New scenario</h3>
+          <label for="sc-title">Title</label>
+          <input id="sc-title" type="text" maxlength="120" placeholder="e.g. Checkout with promo code">
+          <div class="label-row">
+            <label for="sc-text">Scenario</label>
+            <button type="button" id="mic" class="mic" title="Describe the scenario by voice (English)" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            </button>
+            <span id="mic-status" class="msg" role="status"></span>
+          </div>
+          <textarea id="sc-text" rows="4" required placeholder="What to do and what is expected…"></textarea>
+          <label for="sc-url">Start URL (defaults to the project URL)</label>
+          <input id="sc-url" type="url" placeholder="">
+          <div class="actions">
+            <button type="submit" id="sc-save-run">Save &amp; run</button>
+            <button type="button" id="sc-save" class="secondary">Save</button>
+            <button type="button" id="sc-cancel" class="secondary">Cancel</button>
+          </div>
+          <p class="msg error" id="sc-error" hidden></p>
+        </form>
+
+        <div id="scenario-list"></div>
       </div>
-      <div id="history"><p class="msg">Loading…</p></div>
+
+      <div id="unassigned-view" hidden>
+        <div class="project-head">
+          <div class="project-title">
+            <h2>Unsorted runs</h2>
+            <span class="muted">Runs that match no saved scenario. Save one into a project to keep its history there.</span>
+          </div>
+        </div>
+        <div id="unassigned-list"></div>
+      </div>
+    </main>
+
+    <!-- Run viewer: live steps or a past report -->
+    <section class="pane" id="run-pane" aria-label="Run">
+      <div id="run-empty" class="empty">
+        <h2>No run open</h2>
+        <p>Run a scenario or pick one from its history to see the steps, screenshots and video here.</p>
+      </div>
+      <div id="run-view" hidden>
+        <div class="run-head">
+          <div class="project-title">
+            <h2 id="run-title"></h2>
+            <span class="muted" id="run-meta"></span>
+          </div>
+          <span id="run-status" class="badge running">running</span>
+        </div>
+        <div class="actions">
+          <button type="button" id="run-again" class="secondary small">Run again</button>
+          <a id="run-report-link" class="small-link" target="_blank" rel="noopener">report.json</a>
+        </div>
+        <div id="run-summary" class="summary" hidden></div>
+        <div id="run-video-p" hidden>
+          <video id="run-video" controls preload="metadata"></video>
+          <p><a id="run-video-link" href="#">Download video</a></p>
+        </div>
+        <div id="steps"></div>
+      </div>
     </section>
-  </main>
-  <script src="/app.js"></script>
+  </div>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>
