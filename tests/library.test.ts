@@ -1,6 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { assignRuns, groupByScenario, isHttpUrl, projectForUrl, projectStatus, runMatches } from '../web/lib.js';
+import {
+  assignRuns,
+  groupByScenario,
+  isHttpUrl,
+  isNewScenario,
+  outcomeOf,
+  projectForUrl,
+  projectStatus,
+  runMatches,
+  splitScenario,
+  summarize,
+} from '../web/lib.js';
 
 const shop = {
   id: 'p1',
@@ -92,5 +103,52 @@ describe('projectStatus with a queue', () => {
       [shop],
     );
     assert.equal(projectStatus(shop, byScenario), 'queued');
+  });
+});
+
+describe('outcomes', () => {
+  it('separates app bugs from runs the agent did not finish', () => {
+    assert.equal(outcomeOf(undefined), 'not_run');
+    assert.equal(outcomeOf(run({ status: 'bug' })), 'bug');
+    assert.equal(outcomeOf(run({ status: 'stuck' })), 'incomplete');
+    assert.equal(outcomeOf(run({ status: 'max_steps' })), 'incomplete');
+    assert.equal(outcomeOf(run({ status: 'error' })), 'incomplete');
+    assert.equal(outcomeOf(run({ status: 'queued' })), 'pending');
+  });
+
+  it('counts each scenario by its latest run', () => {
+    const { byScenario } = assignRuns(
+      [
+        run({ id: 'a', scenarioId: 's1', status: 'bug', startedAt: '2026-10-27T00:00:00.000Z' }),
+        run({ id: 'b', scenarioId: 's1', status: 'passed', startedAt: '2026-10-28T00:00:00.000Z' }),
+      ],
+      [shop],
+    );
+    assert.deepEqual(summarize(shop, byScenario), { total: 2, passed: 1, bug: 0, incomplete: 0, not_run: 1, pending: 0 });
+  });
+});
+
+describe('splitScenario', () => {
+  it('drops the leading open-the-start-url step and splits off Expected', () => {
+    const parts = splitScenario('Open http://localhost:5173/shop/. Click Add to cart. Expected: Cart: 1.', 'http://localhost:5173/shop/');
+    assert.deepEqual(parts, { steps: 'Click Add to cart.', expected: 'Cart: 1.' });
+  });
+
+  it('keeps an open step for another url and handles no Expected', () => {
+    assert.deepEqual(splitScenario('Open https://other.example/ and look', 'http://localhost:5173/shop/'), {
+      steps: 'Open https://other.example/ and look',
+      expected: '',
+    });
+  });
+});
+
+describe('isNewScenario', () => {
+  const project = { ...shop, lastReview: { at: '2026-10-29T00:01:00.000Z', pages: 1, added: 1 } };
+  it('tags auto scenarios from the latest review until they run', () => {
+    const fresh = { ...shop.scenarios[1], createdAt: '2026-10-29T00:00:59.000Z' };
+    assert.equal(isNewScenario(fresh, project, []), true);
+    assert.equal(isNewScenario(fresh, project, [run({})]), false);
+    assert.equal(isNewScenario({ ...fresh, createdAt: '2026-10-28T00:00:00.000Z' }, project, []), false);
+    assert.equal(isNewScenario({ ...fresh, source: 'manual' }, project, []), false);
   });
 });

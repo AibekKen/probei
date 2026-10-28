@@ -54,6 +54,9 @@ interface ActiveRun extends RunLink {
   url: string;
   scenario: string;
   startedAt: string;
+  maxSteps: number;
+  /** When the latest step finished (ms), so a viewer can show how long the next one is taking. */
+  lastStepAt: number;
   steps: Step[];
   clients: Set<ServerResponse>;
   finished: boolean;
@@ -269,6 +272,11 @@ async function handleClearQueue(req: IncomingMessage, res: ServerResponse, proje
   json(res, 200, { removed });
 }
 
+/** Live-run progress for a viewer: step limit and how long the current step has taken. */
+function progressEvent(run: ActiveRun): Record<string, unknown> {
+  return { type: 'started', maxSteps: run.maxSteps, sinceStepMs: Date.now() - run.lastStepAt };
+}
+
 /** Starts the next queued run when nothing is running. */
 async function startNext(): Promise<void> {
   if ((active && !active.finished) || !queue.length) return;
@@ -281,12 +289,14 @@ async function startNext(): Promise<void> {
     url: next.url,
     scenario: next.scenario,
     startedAt: new Date().toISOString(),
+    maxSteps: next.maxSteps,
+    lastStepAt: Date.now(),
     steps: [],
     clients: next.clients,
     finished: false,
   };
   active = run;
-  broadcast(run, { type: 'started' });
+  broadcast(run, progressEvent(run));
 
   let done: Record<string, unknown> = { type: 'done', status: 'error', error: 'Run ended unexpectedly' };
   try {
@@ -303,6 +313,7 @@ async function startNext(): Promise<void> {
       blockPrivate: !ui.allowPrivateUrls,
       onStep: (s) => {
         run.steps.push(s);
+        run.lastStepAt = Date.now();
         broadcast(run, { type: 'step', step: s });
       },
     });
@@ -628,6 +639,7 @@ async function handleEvents(req: IncomingMessage, res: ServerResponse, id: strin
   if (run) {
     // Live run: replay buffered steps, then keep the stream open for new ones.
     for (const step of run.steps) sendEvent(res, { type: 'step', step });
+    sendEvent(res, progressEvent(run));
     run.clients.add(res);
     req.on('close', () => run.clients.delete(res));
     return;

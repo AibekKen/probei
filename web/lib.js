@@ -117,3 +117,57 @@ function hostOrigin(url) {
     return '';
   }
 }
+
+// --- Outcomes: what a run says about the app, not just how it ended ---
+
+/** Run statuses where the agent could not finish; they say nothing certain about the app. */
+export const INCOMPLETE = new Set(['error', 'stuck', 'max_steps']);
+
+/**
+ * Bucket for a scenario's latest run: 'pending' (queued/running), 'passed',
+ * 'bug' (the app is broken), 'incomplete' (the agent did not finish) or 'not_run'.
+ */
+export function outcomeOf(run) {
+  if (!run) return 'not_run';
+  if (run.status === 'running' || run.status === 'queued') return 'pending';
+  if (run.status === 'passed' || run.status === 'bug') return run.status;
+  return 'incomplete';
+}
+
+/** Counts of scenario outcomes in a project, from each scenario's latest run. */
+export function summarize(project, byScenario) {
+  const counts = { total: 0, passed: 0, bug: 0, incomplete: 0, not_run: 0, pending: 0 };
+  for (const s of project.scenarios) {
+    counts.total++;
+    counts[outcomeOf(byScenario.get(s.id)?.[0])]++;
+  }
+  return counts;
+}
+
+/**
+ * Splits a scenario into steps and the expected result for compact display.
+ * A leading "Open <start url>." is dropped: every row would repeat it.
+ */
+export function splitScenario(text, url) {
+  let steps = String(text ?? '').trim();
+  const lead = /^(open|go to|navigate to|visit)\s+(\S+?)\.?(\s+|$)/i.exec(steps);
+  if (lead && sameUrl(lead[2], url)) steps = steps.slice(lead[0].length);
+  const at = steps.search(/\bexpected\s*:/i);
+  if (at === -1) return { steps: steps.trim(), expected: '' };
+  return {
+    steps: steps.slice(0, at).trim(),
+    expected: steps.slice(at).replace(/^expected\s*:\s*/i, '').trim(),
+  };
+}
+
+function sameUrl(a, b) {
+  const norm = (u) => String(u ?? '').trim().replace(/\/+$/, '').toLowerCase();
+  return norm(a) === norm(b);
+}
+
+/** Auto-drafted by the latest review and never run yet: worth a "new" tag. */
+export function isNewScenario(scenario, project, runs) {
+  if (scenario.source !== 'auto' || (runs && runs.length) || !project.lastReview) return false;
+  // Scenarios are saved a moment before the review timestamp is written.
+  return Date.parse(scenario.createdAt) >= Date.parse(project.lastReview.at) - 60_000;
+}

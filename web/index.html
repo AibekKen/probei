@@ -3,16 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Probei — visual QA</title>
+  <title>Probei · visual QA</title>
+  <script>
+    // Apply the saved theme before first paint, so the page never flashes the other one.
+    try {
+      const t = localStorage.getItem('probei.theme');
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header class="topbar">
-    <h1>Probei</h1>
-    <span class="muted">visual QA</span>
+    <h1 class="wordmark">
+      <!-- The same target the agent draws where it clicked -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4" stroke-linecap="round"/></svg>
+      probei
+    </h1>
+    <span class="tagline">visual QA</span>
     <span class="spacer"></span>
     <label class="inline" for="max-steps">Max steps</label>
     <input id="max-steps" type="number" min="1" max="30" value="25">
+    <button type="button" id="theme-btn" class="secondary small theme-btn" title="Color theme">Auto</button>
   </header>
 
   <div class="workspace">
@@ -94,6 +109,7 @@
           <p class="msg error" id="sc-error" hidden></p>
         </form>
 
+        <div id="project-summary" class="summary-bar" role="group" aria-label="Filter scenarios by result" hidden></div>
         <div id="scenario-list"></div>
       </div>
 
@@ -108,32 +124,45 @@
       </div>
     </main>
 
-    <!-- Run viewer: live steps or a past report -->
-    <section class="pane" id="run-pane" aria-label="Run">
-      <div id="run-empty" class="empty">
-        <h2>No run open</h2>
-        <p>Run a scenario or pick one from its history to see the steps, screenshots and video here.</p>
+    <!-- Run viewer: opens only when a run is shown (live steps or a past report) -->
+    <section class="pane" id="run-pane" aria-label="Run" hidden>
+      <div class="run-head">
+        <div class="project-title">
+          <h2 id="run-title"></h2>
+          <span class="muted" id="run-meta"></span>
+        </div>
+        <span id="run-status" class="badge running">running</span>
+        <button type="button" id="run-close" class="icon" aria-label="Close run" title="Close">&times;</button>
       </div>
-      <div id="run-view" hidden>
-        <div class="run-head">
-          <div class="project-title">
-            <h2 id="run-title"></h2>
-            <span class="muted" id="run-meta"></span>
-          </div>
-          <span id="run-status" class="badge running">running</span>
-        </div>
-        <div class="actions">
-          <button type="button" id="run-again" class="secondary small">Run again</button>
-          <a id="run-report-link" class="small-link" target="_blank" rel="noopener">report.json</a>
-        </div>
-        <div id="run-summary" class="summary" hidden></div>
-        <div id="run-video-p" hidden>
-          <video id="run-video" controls preload="metadata"></video>
-          <p><a id="run-video-link" href="#">Download video</a></p>
-        </div>
-        <div id="steps"></div>
+      <div class="actions">
+        <button type="button" id="run-again" class="secondary small">Run again</button>
+        <a id="run-report-link" class="small-link" target="_blank" rel="noopener">report.json</a>
       </div>
+      <p id="run-progress" class="progress" role="status" hidden></p>
+      <div id="run-verdict" class="verdict" hidden></div>
+      <div id="run-video-p" class="video-row" hidden>
+        <button type="button" id="run-video-open" class="video-thumb" title="Play enlarged">
+          <video id="run-video" preload="metadata" muted playsinline></video>
+          <span class="play" aria-hidden="true"></span>
+        </button>
+        <div class="video-actions">
+          <button type="button" id="run-video-full" class="secondary small">Play enlarged</button>
+          <a id="run-video-link" class="small-link" href="#" download>Download</a>
+        </div>
+      </div>
+      <div id="steps"></div>
     </section>
+  </div>
+  <!-- Full-size screenshot viewer; ← → switch steps, Esc closes -->
+  <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Run media" hidden>
+    <button type="button" id="lb-close" class="lb-btn lb-close" aria-label="Close">&times;</button>
+    <button type="button" id="lb-prev" class="lb-btn lb-prev" aria-label="Previous step">&lsaquo;</button>
+    <figure>
+      <img id="lb-img" alt="">
+      <video id="lb-video" controls playsinline hidden></video>
+      <figcaption id="lb-cap"></figcaption>
+    </figure>
+    <button type="button" id="lb-next" class="lb-btn lb-next" aria-label="Next step">&rsaquo;</button>
   </div>
   <script type="module" src="/app.js"></script>
 </body>
