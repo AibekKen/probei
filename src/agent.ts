@@ -1,4 +1,6 @@
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { markClick } from './annotate.js';
 import { BrowserSession, VIEWPORT } from './browser.js';
 import { askJSON, llmInfo, type Usage } from './llm.js';
 
@@ -132,7 +134,8 @@ export function parseDecision(data: unknown): { thought: string; action: Action 
   }
 }
 
-function describe(action: Action): string {
+/** One-line human-readable summary of an action, for reports and logs. */
+export function describeAction(action: Action): string {
   switch (action.type) {
     case 'click':
       return `click (${action.x}, ${action.y})${action.target ? ` on "${action.target}"` : ''}`;
@@ -156,7 +159,7 @@ function historyText(steps: Step[]): string {
   return steps
     .slice(-12)
     .map((s) => {
-      const parts = [`${s.n}. ${s.action ? describe(s.action) : 'no action'}`];
+      const parts = [`${s.n}. ${s.action ? describeAction(s.action) : 'no action'}`];
       if (s.note) parts.push(`(${s.note})`);
       if (s.errors.length) parts.push(`[errors after this step: ${s.errors.join(' | ')}]`);
       return parts.join(' ');
@@ -239,21 +242,31 @@ export async function runScenario(opts: RunOptions): Promise<RunResult> {
       }
 
       const action = step.action!;
+      const label = describeAction(action);
       switch (action.type) {
         case 'click':
-          await session.click(action.x, action.y);
+          // Burn the click position into this step's screenshot: it was taken
+          // just before the decision, so the marker lands on what the agent saw.
+          // Never fails the run; the raw pixels stay in memory for the loop.
+          try {
+            const shotPath = join(opts.runDir, shotName);
+            await writeFile(shotPath, markClick(await readFile(shotPath), action.x, action.y));
+          } catch {
+            // Unsupported screenshot format: leave the file unmarked.
+          }
+          await session.click(action.x, action.y, label);
           break;
         case 'type':
-          await session.type(action.text, action.clear);
+          await session.type(action.text, action.clear, label);
           break;
         case 'press':
-          await session.press(action.key);
+          await session.press(action.key, label);
           break;
         case 'scroll':
-          await session.scroll(action.dy);
+          await session.scroll(action.dy, label);
           break;
         case 'wait':
-          await session.wait(action.ms);
+          await session.wait(action.ms, label);
           break;
         case 'done':
           result.status = 'passed';

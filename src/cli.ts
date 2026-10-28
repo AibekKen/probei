@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { runScenario } from './agent.js';
+import { describeAction, runScenario } from './agent.js';
 import { getAgentConfig } from './config.js';
 import { writeReport } from './report.js';
 
@@ -36,8 +36,8 @@ const result = await runScenario({
   maxSteps,
   headless: values.headed ? false : agentConfig.headless,
   onStep: (s) => {
-    const what = s.action ? JSON.stringify(s.action) : s.note ?? 'no action';
-    console.log(`#${s.n} ${s.thought}\n    ${what}`);
+    const what = s.action ? describeAction(s.action) : s.note ?? 'no action';
+    console.log(`#${s.n} ${what}\n    ${s.thought}`);
   },
 });
 

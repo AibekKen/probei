@@ -8,6 +8,7 @@
     "probe": "tsx src/cli.ts",
     "zoo": "node zoo/serve.mjs",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
     "browsers": "playwright install chromium",
     "ui": "tsx src/server.ts"
   },

@@ -60,6 +60,27 @@ async function refreshHistory() {
   }
 }
 
+function describeAction(a) {
+  switch (a.type) {
+    case 'click':
+      return `click (${a.x}, ${a.y})${a.target ? ` on "${a.target}"` : ''}`;
+    case 'type':
+      return `type "${a.text}"${a.clear ? ' (replacing field text)' : ''}`;
+    case 'press':
+      return `press ${a.key}`;
+    case 'scroll':
+      return `scroll ${a.dy}px`;
+    case 'wait':
+      return `wait ${a.ms}ms`;
+    case 'done':
+      return `done: ${a.summary}`;
+    case 'bug':
+      return `bug: ${a.title}`;
+    default:
+      return JSON.stringify(a);
+  }
+}
+
 function appendStep(runId, step) {
   const box = $('steps');
   const div = document.createElement('div');
@@ -84,7 +105,8 @@ function appendStep(runId, step) {
   if (step.action) {
     const code = document.createElement('code');
     code.className = 'action';
-    code.textContent = JSON.stringify(step.action);
+    code.textContent = describeAction(step.action);
+    code.title = JSON.stringify(step.action);
     div.append(code);
   }
   for (const e of step.errors ?? []) {
@@ -135,8 +157,10 @@ function showSummary(runId, done) {
     box.append(p);
   }
   if (done.video) {
+    const url = `/api/runs/${encodeURIComponent(runId)}/files/${encodeURIComponent(done.video)}`;
     $('run-video-p').hidden = false;
-    $('run-video').href = `/api/runs/${encodeURIComponent(runId)}/files/${encodeURIComponent(done.video)}`;
+    $('run-video').src = url;
+    $('run-video-link').href = url;
   }
 }
 
@@ -148,6 +172,7 @@ function watchRun(id) {
   $('run-summary').hidden = true;
   $('run-summary').innerHTML = '';
   $('run-video-p').hidden = true;
+  $('run-video').removeAttribute('src');
   setStatus('running');
   source = new EventSource(`/api/runs/${encodeURIComponent(id)}/events`);
   source.onmessage = (msg) => {

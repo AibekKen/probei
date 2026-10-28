@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import type { RunResult } from './agent.js';
+import { describeAction, type RunResult } from './agent.js';
 
 const STATUS_TEXT: Record<RunResult['status'], string> = {
   passed: 'Passed',
@@ -51,9 +51,12 @@ export async function writeReport(runDir: string, result: RunResult): Promise<{ 
   if (result.error) lines.push('## Error', '', '```', result.error, '```', '');
 
   lines.push('## Steps to reproduce', '');
+  lines.push('_The red target on a screenshot marks where the agent clicked._', '');
   for (const s of result.steps) {
-    const what = s.action ? JSON.stringify(s.action) : 'no action';
-    lines.push(`${s.n}. ${s.thought || '—'}  `, `   \`${what}\`${s.note ? ` — ${s.note}` : ''}  `);
+    const what = s.action ? describeAction(s.action) : 'no action';
+    lines.push(`${s.n}. **${what}**  `);
+    if (s.thought) lines.push(`   _${s.thought}_  `);
+    if (s.note) lines.push(`   ${s.note}  `);
     if (s.errors.length) lines.push(`   Errors: ${s.errors.join('; ')}  `);
     lines.push(`   ![step ${s.n}](${s.screenshot})`, '');
   }

@@ -97,6 +97,9 @@ button.secondary { background: #eef2fb; color: var(--brand); }
   margin: 6px 0;
 }
 .step img { width: 100%; border: 1px solid var(--line); border-radius: 8px; margin-top: 8px; }
+#run-video-p h3 { font-size: 15px; margin: 16px 0 8px; }
+#run-video { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #000; }
+#run-video-p p { margin: 6px 0 0; font-size: 13px; }
 .history-item {
   display: block;
   width: 100%;
