@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Steppe Goods — demo shop</title>
+  <style>
+    /* Restyled twin of ../shop/index.html: same flows, same copy, same IDs and
+     * script logic — only the look, layout and class names changed. */
+    :root { --ink:#f2f4f8; --muted:#9aa4b5; --line:#2c3547; --brand:#ffb020; --bg:#141a26; --panel:#1e2636; }
+    * { box-sizing: border-box; }
+    body { margin:0; font: 16px/1.5 Georgia, 'Times New Roman', serif; color:var(--ink); background:var(--bg); }
+    .hero { background: linear-gradient(180deg, #232c40, var(--bg)); padding:34px 24px 10px; text-align:center; border-bottom:1px solid var(--line); }
+    .eyebrow { margin:0 0 4px; font: 12px/1.2 system-ui, sans-serif; text-transform:uppercase; letter-spacing:0.22em; color:var(--brand); }
+    .brand { margin:0; font-size:34px; letter-spacing:0.01em; }
+    .cartpill { display:inline-block; margin:12px 0 18px; padding:6px 18px; border:1px solid var(--line); border-radius:999px; background:var(--panel); font: 14px/1.4 system-ui, sans-serif; }
+    .wrap { max-width:760px; margin:0 auto; padding:20px 20px 60px; display:flex; flex-direction:column; gap:20px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px 20px; }
+    .panel h2 { margin:0 0 10px; font-size:20px; }
+    .plist { display:flex; flex-direction:column; gap:10px; }
+    .prow { display:flex; align-items:center; gap:16px; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px 16px; }
+    .pimg { width:64px; height:64px; border-radius:12px; flex:none; }
+    .pinfo { flex:1; display:flex; flex-direction:column; }
+    .pname { font-size:18px; }
+    .pprice { color:var(--muted); font: 14px/1.4 system-ui, sans-serif; }
+    button { font: 15px/1.2 system-ui, sans-serif; font-weight:600; border:0; border-radius:999px; padding:10px 20px; cursor:pointer; background:var(--brand); color:#221a08; white-space:nowrap; }
+    button.secondary { background:transparent; color:var(--brand); border:1px solid var(--brand); }
+    .crow { display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px dotted var(--line); font: 14px/1.4 system-ui, sans-serif; }
+    .grand { display:flex; justify-content:space-between; font-weight:700; font-size:18px; margin:12px 0; }
+    .fieldrow { display:flex; gap:10px; margin:10px 0; }
+    input { font: 15px/1.2 system-ui, sans-serif; padding:10px 14px; border:1px solid var(--line); border-radius:999px; width:100%; background:#141a26; color:var(--ink); }
+    label { display:block; font: 13px/1.4 system-ui, sans-serif; color:var(--muted); margin-top:10px; }
+    .note { font: 13px/1.4 system-ui, sans-serif; margin:6px 0; color:var(--muted); min-height:18px; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <p class="eyebrow">Fresh groceries from the steppe</p>
+    <h1 class="brand">Steppe Goods</h1>
+    <div><span class="cartpill" id="cart-count">Cart: 0</span></div>
+  </header>
+  <main class="wrap">
+    <section>
+      <div class="panel" id="cart">
+        <h2>Your cart</h2>
+        <div id="lines"><p class="note">The cart is empty.</p></div>
+        <div class="fieldrow">
+          <input id="promo" placeholder="Promo code" aria-label="Promo code">
+          <button class="secondary" id="apply">Apply</button>
+        </div>
+        <p class="note" id="promo-msg"></p>
+        <div class="grand"><span>Total</span><span id="total">0 ₸</span></div>
+        <button id="to-checkout">Checkout</button>
+      </div>
+    </section>
+
+    <section>
+      <div class="plist" id="products"></div>
+    </section>
+
+    <section>
+      <div class="panel hidden" id="checkout">
+        <h2>Checkout</h2>
+        <label for="name">Full name</label>
+        <input id="name" autocomplete="off">
+        <label for="email">Email</label>
+        <input id="email" autocomplete="off">
+        <div class="fieldrow" style="margin-top:14px">
+          <button id="place">Place order</button>
+          <button class="secondary" id="back">Back to cart</button>
+        </div>
+        <p class="note" id="checkout-msg"></p>
+      </div>
+
+      <div class="panel hidden" id="done">
+        <h2>Order confirmed</h2>
+        <p id="done-text"></p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Same shop logic as ../shop/index.html (same flows, same bugs); only the markup classes differ.
+    const PRODUCTS = [
+      { id: 'tea', name: 'Green tea', price: 2500, color: '#cfe8d5' },
+      { id: 'mug', name: 'Ceramic mug', price: 4000, color: '#f3dccb' },
+      { id: 'honey', name: 'Mountain honey', price: 6500, color: '#f6e7b4' },
+    ];
+    const cart = new Map(); // id -> qty
+    let discount = 0;
+
+    const fmt = (n) => `${n.toLocaleString('ru-RU')} ₸`;
+    const $ = (id) => document.getElementById(id);
+
+    $('products').innerHTML = PRODUCTS.map((p) => `
+      <div class="prow">
+        <div class="pimg" style="background:${p.color}"></div>
+        <div class="pinfo"><span class="pname">${p.name}</span><span class="pprice">${fmt(p.price)}</span></div>
+        <button data-add="${p.id}">Add to cart</button>
+      </div>`).join('');
+
+    document.querySelectorAll('[data-add]').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.add;
+        cart.set(id, (cart.get(id) || 0) + 1);
+        render();
+      }));
+
+    function subtotal() {
+      let sum = 0;
+      for (const [id] of cart) {
+        // BUG shop-total-ignores-qty: quantity is ignored in the total.
+        sum += PRODUCTS.find((p) => p.id === id).price;
+      }
+      return sum;
+    }
+
+    function render() {
+      let count = 0;
+      const rows = [];
+      for (const [id, qty] of cart) {
+        const p = PRODUCTS.find((x) => x.id === id);
+        count += qty;
+        rows.push(`<div class="crow"><span>${p.name} × ${qty}</span><span>${fmt(p.price * qty)}</span></div>`);
+      }
+      $('lines').innerHTML = rows.length ? rows.join('') : '<p class="note">The cart is empty.</p>';
+      $('cart-count').textContent = `Cart: ${count}`;
+      const sub = subtotal();
+      // BUG shop-promo-increases-total: the 10% promo is added instead of subtracted.
+      const total = discount ? Math.round(sub * (1 + discount)) : sub;
+      $('total').textContent = fmt(total);
+    }
+
+    $('apply').addEventListener('click', () => {
+      if ($('promo').value.trim().toUpperCase() === 'SAVE10') {
+        discount = 0.1;
+        $('promo-msg').textContent = 'Promo SAVE10 applied: −10%';
+      } else {
+        $('promo-msg').textContent = 'Unknown promo code';
+      }
+      render();
+    });
+
+    $('to-checkout').addEventListener('click', () => {
+      if (cart.size === 0) { $('promo-msg').textContent = 'Add something to the cart first'; return; }
+      $('cart').classList.add('hidden');
+      $('checkout').classList.remove('hidden');
+    });
+
+    $('back').addEventListener('click', () => {
+      $('checkout').classList.add('hidden');
+      $('cart').classList.remove('hidden');
+    });
+
+    $('place').addEventListener('click', () => {
+      const name = $('name').value.trim();
+      if (!name) { $('checkout-msg').textContent = 'Please enter your name'; return; }
+      // BUG shop-checkout-no-email-validation: email is never checked.
+      $('checkout').classList.add('hidden');
+      $('done').classList.remove('hidden');
+      $('done-text').textContent = `Thank you, ${name}! A confirmation was sent to ${$('email').value || '(no email)'}.`;
+    });
+  </script>
+</body>
+</html>
