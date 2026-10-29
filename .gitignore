@@ -21,3 +21,6 @@ runs/
 
 # Web UI projects (app URLs and saved scenarios)
 data/
+
+# Benchmark results (scores of runs against the zoo ground truth)
+bench/

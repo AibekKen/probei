@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "probe": "tsx src/cli.ts",
+    "bench": "tsx src/bench.ts",
     "zoo": "node zoo/serve.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
