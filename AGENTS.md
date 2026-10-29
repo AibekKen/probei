@@ -16,6 +16,8 @@ src/server.ts   web UI API: runs, projects, auto-review; web/ is the page
 src/report.ts   report.json + report.md per run in runs/<run-id>/
 src/cli.ts      npm run probe -- --url ... --scenario "..." [--max-steps N] [--headed]
 zoo/            demo apps with planted bugs; zoo/bugs.json is ground truth
+                shop2/ is the restyled twin (same behavior); selectors.mjs is the brittle
+                selector check that passes on shop and fails on shop2
 ```
 
 Commands: `npm install`, `npm run browsers`, `npm run zoo`, `npm run probe -- ...`, `npm run typecheck`.

@@ -20,14 +20,14 @@ Built for the **Meta Global AI Developer Hackathon** (Oct 26 – Nov 4, 2026), t
 | Baseten (open weights) | `meta-models/muse-spark-open-1026` | `LLM_PROVIDER=baseten` |
 | Meta Model API | Muse Spark (id from Meta docs) | `LLM_PROVIDER=meta` |
 
-Both are OpenAI-compatible, so switching is one line in `.env`.
+Whoever runs the agent locally chooses one of the two: set `LLM_PROVIDER` in `.env` and fill in only that provider's keys — the other section can stay empty. Both are OpenAI-compatible, so switching is one line in `.env`.
 
 ## Quick start
 
 ```bash
 npm install
 npm run browsers          # downloads Chromium for Playwright
-cp .env.example .env      # add your key(s); .env is git-ignored
+cp .env.example .env      # pick one provider (LLM_PROVIDER) and add its key(s); .env is git-ignored
 npm run zoo               # bug zoo shop at http://localhost:5173/shop/
 ```
 
@@ -82,15 +82,39 @@ HOST=0.0.0.0 UI_PASSWORD=<long-random-password> ALLOWED_ORIGIN=https://probei.ex
 - whether tests still pass after a redesign;
 - time and cost per run.
 
+Run the benchmark with the zoo server up:
+
+```bash
+npm run zoo                  # in one terminal
+npm run bench                # in another: runs every ground-truth scenario headless
+```
+
+Each case runs like a normal probe (reports land in `runs/bench-*/`), then gets scored: bug scenarios must end in `bug`, clean ones in `passed`. The score table prints to the console and saves as JSON to `bench/`. Useful flags: `--dry-run` (list cases without running), `--limit N` (first N cases), `--max-steps N`, and `--url-from/--url-to` to replay every scenario against a restyled copy for the redesign test. Cost uses `--price-in/--price-out` per 1M tokens (defaults: 1.25/4.25).
+
+## Redesign test
+
+`zoo/shop2/` is the shop after a redesign: new layout, theme, DOM structure and class names, but identical flows, copy and behavior (verified by driving both through the same click flow and comparing every text). The same scenarios run against it with no changes:
+
+```bash
+npm run zoo                                                     # in one terminal
+npm run bench -- --url-from /shop/ --url-to /shop2/             # Probei on the restyle
+node zoo/selectors.mjs http://localhost:5173/shop/              # classic selectors: PASS
+node zoo/selectors.mjs http://localhost:5173/shop2/             # same script: FAIL
+```
+
+`zoo/selectors.mjs` is a plain Playwright check written against the old shop's classes and element positions — the kind of suite that breaks on every redesign. Observed result (Meta `muse-spark-1.3`, Oct 29): Probei found 1/3 bugs on the shop and 2/3 on the restyle with zero false alarms on either (small sample — scores vary run to run), while the selector script went from PASS to FAIL. No selectors, nothing to break.
+
 ## Roadmap for the hackathon
 
 - [x] Agent loop v0, provider switch, reports with screenshots and video
 - [x] Bug zoo app #1 (shop) with three planted bugs
+- [x] Web UI: projects with saved scenarios, run-all queue, live run view, reports
+- [x] Auto-review: crawl the app and draft scenarios (CLI `--suggest` and UI button)
+- [x] Voice scenarios via the browser's speech recognition (no model tokens)
+- [x] Deploy watch: notify on a new deploy, optionally run all tests after it
 - [ ] SAM 3.1 element finder (fallback: coordinates from Muse Spark)
-- [ ] Bug zoo benchmark runner and metrics table
-- [ ] Redesign test: same scenario on a restyled shop
-- [ ] Voice scenarios (Muse Voice Transcribe)
-- [ ] Web UI: start a run, watch it live, read the report
+- [x] Bug zoo benchmark runner and metrics table
+- [x] Redesign test: same scenario on a restyled shop
 
 ## Security
 
