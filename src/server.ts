@@ -8,6 +8,7 @@ import { basename, dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runScenario, type RunResult, type Step } from './agent.js';
 import { getAgentConfig, getUiConfig } from './config.js';
+import { fetchFingerprint, isNewDeploy } from './deploy.js';
 import { llmInfo } from './llm.js';
 import { isPublicHost } from './netguard.js';
 import {
@@ -236,6 +237,17 @@ async function handleStartRun(req: IncomingMessage, res: ServerResponse): Promis
   json(res, 202, { id, queued: queue.some((q) => q.id === id) });
 }
 
+/** Queues every idle scenario of a project; shared by Run-all and the deploy watcher. */
+async function enqueueProjectRuns(projectId: string, project: Project, maxSteps: number): Promise<string[]> {
+  const ids: string[] = [];
+  for (const s of project.scenarios) {
+    if (scenarioBusy(s.id)) continue;
+    if (!ui.allowPrivateUrls && !(await isPublicHost(new URL(s.url).hostname))) continue;
+    ids.push(enqueue({ projectId, scenarioId: s.id, url: s.url, scenario: s.text, maxSteps }));
+  }
+  return ids;
+}
+
 /** Queues every scenario of a project that is not already waiting or running. */
 async function handleRunAll(req: IncomingMessage, res: ServerResponse, projectId: string): Promise<void> {
   const b = await readJsonRequest(req, res);
@@ -247,13 +259,7 @@ async function handleRunAll(req: IncomingMessage, res: ServerResponse, projectId
   }
   const opts = await readRunOptions(res, b);
   if (!opts) return;
-  const ids: string[] = [];
-  for (const s of project.scenarios) {
-    if (scenarioBusy(s.id)) continue;
-    if (!ui.allowPrivateUrls && !(await isPublicHost(new URL(s.url).hostname))) continue;
-    ids.push(enqueue({ projectId, scenarioId: s.id, url: s.url, scenario: s.text, maxSteps: opts.maxSteps }));
-  }
-  json(res, 202, { ids });
+  json(res, 202, { ids: await enqueueProjectRuns(projectId, project, opts.maxSteps) });
 }
 
 /** Drops waiting runs (all, or one project's); the running one finishes. */
@@ -446,10 +452,45 @@ async function handleProjects(req: IncomingMessage, res: ServerResponse, method:
       const url = b.url === undefined ? undefined : await allowedUrl(res, b.url);
       if (url === null) return;
       const name = optionalString(b.name, 120);
+      for (const flag of ['notifyOnDeploy', 'autoRunOnDeploy']) {
+        if (b[flag] !== undefined && typeof b[flag] !== 'boolean') {
+          json(res, 400, { error: `${flag} must be a boolean` });
+          return;
+        }
+      }
+      const notifyOnDeploy = b.notifyOnDeploy as boolean | undefined;
+      const autoRunOnDeploy = b.autoRunOnDeploy as boolean | undefined;
+      // Starting to watch baselines the current deploy, so it never fires immediately.
+      let baseline: string | null | undefined;
+      const switchingUrl = url !== undefined;
+      if (notifyOnDeploy === true || autoRunOnDeploy === true || switchingUrl) {
+        const current = (await projects.read()).projects.find((p) => p.id === projectId);
+        if (!current) {
+          json(res, 404, { error: 'Project not found' });
+          return;
+        }
+        const wasWatched = current.notifyOnDeploy || current.autoRunOnDeploy;
+        const willWatch = (notifyOnDeploy ?? current.notifyOnDeploy) || (autoRunOnDeploy ?? current.autoRunOnDeploy);
+        if ((willWatch && (!wasWatched || !current.deployFingerprint)) || (switchingUrl && willWatch)) {
+          const target = url ?? current.url;
+          if (!ui.allowPrivateUrls && !(await isPublicHost(new URL(target).hostname))) {
+            json(res, 400, { error: 'url must point to a public address on this server' });
+            return;
+          }
+          baseline = await fetchFingerprint(target);
+        }
+      }
       await storeUpdate(res, 200, (store) => {
         const project = findProject(store, projectId);
         if (name) project.name = name;
-        if (url) project.url = url;
+        if (url) {
+          project.url = url;
+          project.deployFingerprint = baseline ?? null; // a new app URL needs a fresh baseline
+        }
+        if (notifyOnDeploy !== undefined) project.notifyOnDeploy = notifyOnDeploy;
+        if (autoRunOnDeploy !== undefined) project.autoRunOnDeploy = autoRunOnDeploy;
+        if (baseline && !url) project.deployFingerprint = baseline;
+        if (baseline) project.lastDeployCheckAt = new Date().toISOString();
         return project;
       });
       return;
@@ -744,9 +785,61 @@ async function onRequest(req: IncomingMessage, res: ServerResponse): Promise<voi
   }
 }
 
+/** Polls watched projects for a new deploy: notify-only records it, auto-run also queues every scenario. */
+let deployChecking = false;
+async function checkDeploys(): Promise<void> {
+  if (deployChecking) return;
+  deployChecking = true;
+  try {
+    const store = await projects.read();
+    const watched = store.projects.filter((p) => (p.notifyOnDeploy || p.autoRunOnDeploy) && p.scenarios.length);
+    for (const p of watched) {
+      if (!ui.allowPrivateUrls && !(await isPublicHost(new URL(p.url).hostname))) continue;
+      const current = await fetchFingerprint(p.url);
+      const now = new Date().toISOString();
+      if (!current) {
+        await projects.update((s) => {
+          const project = s.projects.find((x) => x.id === p.id);
+          if (project) project.lastDeployCheckAt = now;
+        });
+        continue;
+      }
+      const deployed = isNewDeploy(p.deployFingerprint, current);
+      await projects.update((s) => {
+        const project = s.projects.find((x) => x.id === p.id);
+        if (!project) return;
+        project.deployFingerprint = current;
+        project.lastDeployCheckAt = now;
+        if (deployed) project.lastDeployAt = now;
+      });
+      if (!deployed) continue;
+      if (!p.autoRunOnDeploy) {
+        console.log(`Deploy watcher: new deploy for "${p.name}" (notify only).`);
+        continue;
+      }
+      try {
+        llmInfo(); // skip auto-runs when the provider settings are missing
+      } catch {
+        console.log(`Deploy watcher: new deploy for "${p.name}", but the model is not configured; skipping.`);
+        continue;
+      }
+      const agentConfig = getAgentConfig();
+      const ids = await enqueueProjectRuns(p.id, p, Math.min(agentConfig.maxSteps, ui.maxSteps));
+      console.log(`Deploy watcher: new deploy for "${p.name}", queued ${ids.length} scenario(s).`);
+    }
+  } catch (err) {
+    console.log(`Deploy watcher: ${(err as Error).message}`);
+  } finally {
+    deployChecking = false;
+  }
+}
+
 await mkdir(runsDir, { recursive: true });
 createServer((req, res) => void onRequest(req, res)).listen(ui.port, ui.host, () => {
   const where = ui.host === '0.0.0.0' || ui.host === '::' ? `all interfaces, port ${ui.port}` : `http://${ui.host}:${ui.port}/`;
   console.log(`Probei UI: ${where}${ui.password ? ' (password required)' : ''}`);
   if (!ui.allowPrivateUrls) console.log('Runs may only open public addresses (ALLOW_PRIVATE_URLS=false).');
+  const timer = setInterval(() => void checkDeploys(), ui.deployPollMs);
+  timer.unref?.();
+  void checkDeploys();
 });

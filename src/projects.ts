@@ -21,6 +21,14 @@ export interface Project {
   createdAt: string;
   scenarios: Scenario[];
   lastReview?: { at: string; pages: number; added: number };
+  /** When true, the server watches the app URL and records each new deploy. */
+  notifyOnDeploy: boolean;
+  /** When true, a detected deploy also queues all scenarios. Needs no other flag. */
+  autoRunOnDeploy: boolean;
+  /** Last seen deploy fingerprint (ETag / Last-Modified / body hash); null until first check. */
+  deployFingerprint: string | null;
+  lastDeployCheckAt?: string;
+  lastDeployAt?: string;
 }
 
 export interface Store {
@@ -91,6 +99,11 @@ export function parseStore(raw: unknown): Store {
       createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date(0).toISOString(),
       scenarios,
       ...(p.lastReview && typeof p.lastReview === 'object' ? { lastReview: p.lastReview } : {}),
+      notifyOnDeploy: p.notifyOnDeploy === true,
+      autoRunOnDeploy: p.autoRunOnDeploy === true,
+      deployFingerprint: typeof p.deployFingerprint === 'string' && p.deployFingerprint ? p.deployFingerprint : null,
+      ...(typeof p.lastDeployCheckAt === 'string' ? { lastDeployCheckAt: p.lastDeployCheckAt } : {}),
+      ...(typeof p.lastDeployAt === 'string' ? { lastDeployAt: p.lastDeployAt } : {}),
     });
   }
   return { projects };
@@ -103,6 +116,9 @@ export function createProject(input: { name?: string; url: string }): Project {
     url: input.url,
     createdAt: new Date().toISOString(),
     scenarios: [],
+    notifyOnDeploy: false,
+    autoRunOnDeploy: false,
+    deployFingerprint: null,
   };
 }
 

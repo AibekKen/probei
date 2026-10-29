@@ -83,6 +83,8 @@ export interface UiConfig {
   maxSteps: number;
   /** false: the agent may not open localhost, private networks or cloud metadata addresses. */
   allowPrivateUrls: boolean;
+  /** How often the server checks watched projects for a new deploy (ms). */
+  deployPollMs: number;
 }
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
@@ -108,5 +110,6 @@ export function getUiConfig(): UiConfig {
     password,
     maxSteps: intEnv('UI_MAX_STEPS', 30),
     allowPrivateUrls: rawPrivate ? rawPrivate === 'true' : local,
+    deployPollMs: intEnv('DEPLOY_POLL_MS', 60_000),
   };
 }
