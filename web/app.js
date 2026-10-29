@@ -263,6 +263,7 @@ function renderProject(project) {
   $('project-url').href = project.url;
   $('review-btn').disabled = reviewing;
   $('run-all-btn').disabled = !project.scenarios.length;
+  renderDeployWatch(project);
   renderQueue(project);
   if (!reviewing && !$('review-status').textContent && project.lastReview) {
     const r = project.lastReview;
@@ -336,6 +337,25 @@ function renderSummary(project) {
       ),
     );
   }
+}
+
+/** Deploy watch checkbox state plus a short watching/last-deploy note. */
+function renderDeployWatch(project) {
+  for (const [id, flag] of [['deploy-notify', 'notifyOnDeploy'], ['deploy-auto', 'autoRunOnDeploy']]) {
+    const box = $(id);
+    if (document.activeElement !== box) box.checked = Boolean(project[flag]);
+    box.disabled = deploySaving;
+  }
+  const status = $('deploy-status');
+  const watching = project.notifyOnDeploy || project.autoRunOnDeploy;
+  if (!watching) {
+    status.textContent = '';
+    return;
+  }
+  const bits = [project.autoRunOnDeploy ? 'Watching for deploys · will run all tests' : 'Watching for deploys · notify only'];
+  if (project.lastDeployAt) bits.push(`last deploy ${fmtTime(project.lastDeployAt)}`);
+  else if (project.lastDeployCheckAt) bits.push(`checked ${fmtTime(project.lastDeployCheckAt)}`);
+  status.textContent = bits.join(' · ');
 }
 
 /** "Queue: 1 running, 4 waiting" for this project, with a cancel button. */
@@ -594,6 +614,31 @@ async function autoReview() {
 }
 
 $('review-btn').addEventListener('click', () => void autoReview());
+
+// --- Deploy watch: auto-detect a new deploy and queue every scenario ---
+
+let deploySaving = false;
+
+for (const [id, flag] of [['deploy-notify', 'notifyOnDeploy'], ['deploy-auto', 'autoRunOnDeploy']]) {
+  $(id).addEventListener('change', async () => {
+    const project = currentProject();
+    if (!project) return;
+    const enabled = $(id).checked;
+    deploySaving = true;
+    $('deploy-notify').disabled = true;
+    $('deploy-auto').disabled = true;
+    showError('project-error', null);
+    try {
+      await api('PATCH', `/api/projects/${project.id}`, { [flag]: enabled });
+      await refresh();
+    } catch (err) {
+      $(id).checked = Boolean(project[flag]);
+      showError('project-error', err.message);
+    } finally {
+      deploySaving = false;
+    }
+  });
+}
 
 // --- Run all: queue every scenario of the project; the server runs them one by one ---
 

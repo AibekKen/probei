@@ -83,6 +83,17 @@
             </details>
           </div>
         </div>
+        <div class="deploy-row">
+          <label class="deploy-toggle" for="deploy-notify">
+            <input type="checkbox" id="deploy-notify">
+            <span>Notify on new deploy</span>
+          </label>
+          <label class="deploy-toggle" for="deploy-auto">
+            <input type="checkbox" id="deploy-auto">
+            <span>Run all tests after a new deploy</span>
+          </label>
+          <span class="muted deploy-status" id="deploy-status"></span>
+        </div>
         <p class="msg queue" id="queue-status" role="status" hidden></p>
         <p class="msg" id="review-status" role="status"></p>
         <p class="msg error" id="project-error" hidden></p>
